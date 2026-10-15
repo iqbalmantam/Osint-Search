@@ -43,7 +43,7 @@ def detect_query_type(q):
     # Cek apakah Email
     elif "@" in q and "." in q.split("@")[1]:
         return "email"
-    # Cek apakah Nomor Telepon (mengandung angka dan minimal panjang 8 digit)
+    # Cek apakah Nomor Telepon
     elif re.match(r"^\+?[0-9\-\s]{8,15}$", q):
         return "phone"
     # Cek apakah Domain / URL
@@ -58,7 +58,7 @@ if query:
     
     # 1. Jika terdeteksi sebagai IP Address
     if q_type == "ip":
-        st.success(🎯 **Deteksi Otomatis:** Target adalah sebuah **Alamat IP**.)
+        st.success("🎯 **Deteksi Otomatis:** Target adalah sebuah **Alamat IP**.")
         with st.spinner("Mengambil data geolokasi & jaringan..."):
             try:
                 res = requests.get(f"http://ip-api.com/json/{query}", timeout=7)
@@ -126,15 +126,15 @@ if query:
     # 3. Jika terdeteksi sebagai Email
     elif q_type == "email":
         domain_part = query.split("@")[-1]
-        st.success(f"🎯 **Deteksi Otomatis:** Target adalah sebuah **Alamat Email**.")
+        st.success("🎯 **Deteksi Otomatis:** Target adalah sebuah **Alamat Email**.")
         st.markdown(f"### Analisis Komponen Email: `{query}`")
-        st.write(f"- **Pemeriksaan MX Record Domain ({domain_part}):** [MXToolbox](https://mxtoolbox.com/SuperTool.aspx?action=mx%3a{domain_part})")
-        st.write(f"- **Pemeriksaan Kebocoran Data (Breach):** [HaveIBeenPwned](https://haveibeenpwned.com/) (Cari manual dengan email tersebut)")
+        st.markdown(f"- **Pemeriksaan MX Record Domain ({domain_part}):** [MXToolbox](https://mxtoolbox.com/SuperTool.aspx?action=mx%3a{domain_part})")
+        st.markdown(f"- **Pemeriksaan Kebocoran Data (Breach):** [HaveIBeenPwned](https://haveibeenpwned.com/) (Cari manual dengan email tersebut)")
 
     # 4. Jika terdeteksi sebagai Nomor Telepon
     elif q_type == "phone":
         clean_phone = query.replace("+", "").replace(" ", "").replace("-", "")
-        st.success(f"🎯 **Deteksi Otomatis:** Target adalah sebuah **Nomor Telepon**.")
+        st.success("🎯 **Deteksi Otomatis:** Target adalah sebuah **Nomor Telepon**.")
         st.markdown(f"- **Chat WhatsApp Langsung:** [Buka WhatsApp](https://wa.me/{clean_phone})")
         st.markdown(f"- **Kode Negara / Operator:** [Country Code Lookup](https://www.countrycode.org/)")
 
