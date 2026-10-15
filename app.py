@@ -2,58 +2,150 @@ import streamlit as st
 import requests
 import urllib.parse
 import pandas as pd
+import re
 
-# Konfigurasi Halaman (Clean Layout)
+# Konfigurasi Halaman (Clean Layout - Tanpa Sidebar & Header Bawaan)
 st.set_page_config(
-    page_title="OSINT Search Engine Workstation",
+    page_title="OSINT Smart Search Engine",
     page_icon="🔍",
     layout="wide"
 )
 
-# Header Utama
-st.title("🔍 OSINT Search Engine Workstation")
-st.markdown("Pusat pencarian intelijen sumber terbuka (*Open Source Intelligence*) terpadu dengan verifikasi real-time dan modul penelusuran mendalam.")
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# Header Utama Minimalis
+st.title("🔍 OSINT Smart Search Engine")
+st.markdown("Masukkan target apa saja. Sistem cerdas akan mendeteksi tipe data dan menjalankan investigasi secara otomatis.")
 st.markdown("---")
 
-# Pengaturan Kategori Target (Di Main Container - Tanpa Sidebar)
-col_mode, col_info = st.columns([2, 1])
-with col_mode:
-    search_type = st.selectbox(
-        "Pilih Kategori Target Investigasi:",
-        [
-            "Username Live Checker", 
-            "IP / Domain Geolocation & Lookup", 
-            "Subdomain & Certificate Recon (crt.sh)",
-            "Google Dork Generator", 
-            "Email & Phone Recon"
-        ]
-    )
-with col_info:
-    st.info("💡 **Tips:** Pastikan format target yang dimasukkan sesuai dengan kategori investigasi yang dipilih.")
-
-st.markdown("")
-
-# Input Kueri Utama
+# Kotak Search Engine Tunggal
 query = st.text_input(
-    "Masukkan Kueri Target (Username, Domain, IP, Email, atau Kata Kunci):",
-    placeholder="Contoh: joko_susilo / detik.com / 8.8.8.8 / target@domain.com"
+    "Search Engine Target:",
+    placeholder="Ketik IP, Domain, Email, No HP, atau Username... (Contoh: 8.8.8.8, detik.com, joko_susilo)"
 ).strip()
 
 st.markdown("---")
 
-# Tombol Eksekusi
-if st.button("Jalankan Investigasi OSINT", type="primary", use_container_width=True):
-    if not query:
-        st.warning("⚠️ Mohon masukkan kueri target terlebih dahulu!")
+# Fungsi Deteksi Tipe Kueri Cerdas
+def detect_query_type(q):
+    if not q:
+        return "empty"
+    # Cek apakah format IP Address
+    if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", q):
+        return "ip"
+    # Cek apakah Email
+    elif "@" in q and "." in q.split("@")[1]:
+        return "email"
+    # Cek apakah Nomor Telepon (mengandung angka dan minimal panjang 8 digit)
+    elif re.match(r"^\+?[0-9\-\s]{8,15}$", q):
+        return "phone"
+    # Cek apakah Domain / URL
+    elif "." in q and " " not in q and not q.startswith("@"):
+        return "domain"
+    # Selebihnya dianggap Username / Kata Kunci Umum
     else:
-        st.success(f"Menjalankan modul pencarian untuk target: **{query}**")
-        st.markdown("")
-        
-        # 1. Modul Username Live Checker
-        if search_type == "Username Live Checker":
-            st.subheader("🌐 Pengecekan Eksistensi Username (Live HTTP Status Check)")
-            st.info("Sistem memverifikasi status ketersediaan profil publik secara langsung melalui permintaan HTTP.")
+        return "username_or_keyword"
 
+if query:
+    q_type = detect_query_type(query)
+    
+    # 1. Jika terdeteksi sebagai IP Address
+    if q_type == "ip":
+        st.success(🎯 **Deteksi Otomatis:** Target adalah sebuah **Alamat IP**.)
+        with st.spinner("Mengambil data geolokasi & jaringan..."):
+            try:
+                res = requests.get(f"http://ip-api.com/json/{query}", timeout=7)
+                if res.status_code == 200:
+                    data = res.json()
+                    if data.get("status") == "success":
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Negara", data.get("country", "-"))
+                        col2.metric("Wilayah", data.get("regionName", "-"))
+                        col3.metric("Kota", data.get("city", "-"))
+                        
+                        st.json(data)
+                    else:
+                        st.error("Data IP tidak ditemukan atau privat.")
+                else:
+                    st.error("Gagal terhubung ke server lookup IP.")
+            except Exception as e:
+                st.error(f"Koneksi error: {e}")
+
+    # 2. Jika terdeteksi sebagai Domain
+    elif q_type == "domain":
+        clean_domain = query.replace("https://", "").replace("http://", "").split("/")[0]
+        st.success(f"🎯 **Deteksi Otomatis:** Target adalah sebuah **Domain / Website** (`{clean_domain}`).")
+        
+        tab1, tab2, tab3 = st.tabs(["🌍 Geolocation / Server", "🛡️ Subdomain Recon (crt.sh)", "🔎 Google Dork Target"])
+        
+        with tab1:
+            try:
+                res = requests.get(f"https://ipapi.co/{clean_domain}/json/", timeout=7)
+                if res.status_code == 200:
+                    st.json(res.json())
+                else:
+                    st.warning("Lookup domain terbatas.")
+            except:
+                st.error("Gagal mengambil data domain.")
+                
+        with tab2:
+            st.write("Mencari riwayat sertifikat & subdomain publik...")
+            try:
+                crt_url = f"https://crt.sh/?q={clean_domain}&output=json"
+                response = requests.get(crt_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+                if response.status_code == 200 and response.content:
+                    data = response.json()
+                    subdomains = set()
+                    for entry in data:
+                        for sub in entry.get("name_value", "").split("\n"):
+                            subdomains.add(sub.strip().lower())
+                    df_sub = pd.DataFrame(list(subdomains), columns=["Subdomain Ditemukan"])
+                    st.dataframe(df_sub, use_container_width=True)
+                else:
+                    st.info("Tidak ada data subdomain terekam.")
+            except:
+                st.markdown(f"👉 [Buka crt.sh secara manual](https://crt.sh/?q={clean_domain})")
+                
+        with tab3:
+            dorks = {
+                "Dokumen Sensitif (PDF/Doc)": f'site:{clean_domain} filetype:pdf OR filetype:doc OR filetype:xls',
+                "Direktori Terbuka": f'site:{clean_domain} intitle:"index of"',
+                "File Konfigurasi": f'site:{clean_domain} filetype:env OR filetype:sql OR filetype:json'
+            }
+            for title, dork_q in dorks.items():
+                url = f"https://www.google.com/search?q={urllib.parse.quote(dork_q)}"
+                st.markdown(f"- **{title}**: [`{dork_q}`]({url})")
+
+    # 3. Jika terdeteksi sebagai Email
+    elif q_type == "email":
+        domain_part = query.split("@")[-1]
+        st.success(f"🎯 **Deteksi Otomatis:** Target adalah sebuah **Alamat Email**.")
+        st.markdown(f"### Analisis Komponen Email: `{query}`")
+        st.write(f"- **Pemeriksaan MX Record Domain ({domain_part}):** [MXToolbox](https://mxtoolbox.com/SuperTool.aspx?action=mx%3a{domain_part})")
+        st.write(f"- **Pemeriksaan Kebocoran Data (Breach):** [HaveIBeenPwned](https://haveibeenpwned.com/) (Cari manual dengan email tersebut)")
+
+    # 4. Jika terdeteksi sebagai Nomor Telepon
+    elif q_type == "phone":
+        clean_phone = query.replace("+", "").replace(" ", "").replace("-", "")
+        st.success(f"🎯 **Deteksi Otomatis:** Target adalah sebuah **Nomor Telepon**.")
+        st.markdown(f"- **Chat WhatsApp Langsung:** [Buka WhatsApp](https://wa.me/{clean_phone})")
+        st.markdown(f"- **Kode Negara / Operator:** [Country Code Lookup](https://www.countrycode.org/)")
+
+    # 5. Jika terdeteksi sebagai Username / Kata Kunci Umum
+    else:
+        st.success(f"🎯 **Deteksi Otomatis:** Target adalah **Username / Kata Kunci** (`{query}`).")
+        
+        tab_user, tab_dork = st.tabs(["🌐 Live Username Check", "🔎 Deep Google Dork"])
+        
+        with tab_user:
+            st.write("Memeriksa eksistensi akun di platform publik secara real-time...")
             platforms = {
                 "GitHub": f"https://github.com/{query}",
                 "Instagram": f"https://www.instagram.com/{query}/",
@@ -62,153 +154,25 @@ if st.button("Jalankan Investigasi OSINT", type="primary", use_container_width=T
                 "Telegram": f"https://t.me/{query}",
                 "Reddit": f"https://www.reddit.com/user/{query}"
             }
-
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-
+            headers = {"User-Agent": "Mozilla/5.0"}
             results = []
-            progress_bar = st.progress(0)
-            total = len(platforms)
-
-            for i, (plat, url) in enumerate(platforms.items()):
-                status_text = "Tidak Diketahui / Proteksi Bot"
-                badge = "⚠️ Netral"
+            
+            for plat, url in platforms.items():
+                status = "Netral"
                 try:
-                    response = requests.get(url, headers=headers, timeout=5, allow_redirects=True)
-                    if response.status_code == 200:
-                        status_text = "Aktif / Ditemukan (200 OK)"
-                        badge = "🟢 Ditemukan"
-                    elif response.status_code == 404:
-                        status_text = "Tidak Ditemukan (404 Not Found)"
-                        badge = "🔴 Tidak Ada"
-                    else:
-                        status_text = f"Respon Server ({response.status_code})"
-                        badge = "🟡 Terbatas"
-                except requests.exceptions.Timeout:
-                    status_text = "Koneksi Timeout"
-                    badge = "⏱️ Timeout"
-                except Exception:
-                    status_text = "Diblokir / Proteksi Keamanan"
-                    badge = "🛡️ Dilindungi"
-
-                results.append({
-                    "Platform": plat,
-                    "Status Akun": badge,
-                    "Keterangan": status_text,
-                    "URL Tautan": url
-                })
-                progress_bar.progress((i + 1) / total)
-
-            df_res = pd.DataFrame(results)
-            st.dataframe(df_res, use_container_width=True)
-
-        # 2. Modul IP / Domain Geolocation & Lookup
-        elif search_type == "IP / Domain Geolocation & Lookup":
-            st.subheader("🌍 Informasi Jaringan, ASN, & Geolocation Real-Time")
-            clean_query = query.replace("https://", "").replace("http://", "").split("/")[0]
+                    resp = requests.get(url, headers=headers, timeout=4, allow_redirects=True)
+                    status = "🟢 Ditemukan (200)" if resp.status_code == 200 else "🔴 Tidak Ada (404)"
+                except:
+                    status = "🛡️ Dilindungi / Timeout"
+                results.append({"Platform": plat, "Status": status, "URL": url})
+                
+            st.dataframe(pd.DataFrame(results), use_container_width=True)
             
-            with st.spinner("Mengambil data jaringan dari server lookup global..."):
-                try:
-                    is_ip = all(part.isdigit() for part in clean_query.split(".") if part) and len(clean_query.split(".")) == 4
-                    
-                    if is_ip:
-                        api_url = f"http://ip-api.com/json/{clean_query}"
-                    else:
-                        api_url = f"https://ipapi.co/{clean_query}/json/"
-
-                    res = requests.get(api_url, timeout=7)
-                    if res.status_code == 200:
-                        data = res.json()
-                        if "error" in data:
-                            st.error(f"Gagal dari API: {data.get('reason', 'Target tidak valid')}")
-                        else:
-                            st.json(data)
-                            
-                            if is_ip and "country" in data:
-                                st.markdown("### Ringkasan Lokasi:")
-                                st.markdown(f"- **Negara:** {data.get('country', '-')}")
-                                st.markdown(f"- **Wilayah/Kota:** {data.get('regionName', '-')}, {data.get('city', '-')}")
-                                st.markdown(f"- **ISP / Organisasi:** {data.get('isp', '-')}, {data.get('org', '-')}")
-                    else:
-                        st.error("Gagal terhubung ke layanan lookup jaringan publik.")
-                except Exception as e:
-                    st.error(f"Terjadi kesalahan saat memproses kueri jaringan: {e}")
-
-        # 3. Modul Baru: Subdomain & Certificate Transparency Recon (crt.sh)
-        elif search_type == "Subdomain & Certificate Recon (crt.sh)":
-            st.subheader("🛡️ Subdomain & Certificate Transparency Intelligence")
-            clean_domain = query.replace("https://", "").replace("http://", "").split("/")[0]
-            st.info(f"Menganalisis riwayat sertifikat SSL/TLS untuk domain utama: **{clean_domain}**")
-            
-            crt_url = f"https://crt.sh/?q={clean_domain}&output=json"
-            
-            with st.spinner("Mengambil riwayat sertifikat publik dari crt.sh..."):
-                try:
-                    headers = {"User-Agent": "Mozilla/5.0"}
-                    response = requests.get(crt_url, headers=headers, timeout=10)
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        if len(data) == 0:
-                            st.warning("Tidak ditemukan data subdomain/sertifikat untuk target tersebut.")
-                        else:
-                            # Ekstraksi dan pembersihan subdomain unik
-                            subdomains = set()
-                            for entry in data:
-                                name_value = entry.get("name_value", "")
-                                for sub in name_value.split("\n"):
-                                    subdomains.add(sub.strip().lower())
-                            
-                            df_sub = pd.DataFrame(list(subdomains), columns=["Daftar Subdomain / Common Name"])
-                            st.success(kamus_sukses := f"Berhasil menemukan {len(df_sub)} entri unik terkait domain tersebut!")
-                            st.dataframe(df_sub, use_container_width=True)
-                            
-                            # Tautan langsung web crt.sh
-                            direct_link = f"https://crt.sh/?q={clean_domain}"
-                            st.markdown(f"👉 **Buka Tampilan Lengkap di crt.sh:** [Klik di sini]({direct_link})")
-                    else:
-                        st.error("Gagal mengambil data dari server crt.sh. Silakan gunakan tautan langsung di bawah.")
-                        st.markdown(f"👉 [Buka crt.sh secara manual](https://crt.sh/?q={clean_domain})")
-                except Exception as e:
-                    st.warning(f"Respon server crt.sh tertunda atau memerlukan query manual. Silakan akses langsung: [crt.sh/?q={clean_domain}](https://crt.sh/?q={clean_domain})")
-
-        # 4. Modul Google Dork Generator
-        elif search_type == "Google Dork Generator":
-            st.subheader("🔎 Konstruksi Google Dork Lanjutan")
-            st.markdown("Gunakan tautan cepat di bawah untuk melakukan *deep search* langsung ke indeks Google:")
-            
+        with tab_dork:
             dorks = {
-                "Dokumen Sensitif & Publik (PDF/Doc/Xls)": f'site:{query} filetype:pdf OR filetype:doc OR filetype:xls OR filetype:xlsx',
-                "Direktori Terbuka / Indeks Server": f'site:{query} intitle:"index of"',
-                "File Konfigurasi / Database (Env/Sql/Json)": f'site:{query} filetype:env OR filetype:sql OR filetype:json OR filetype:txt',
-                "Pejabat / Karyawan / Profil Terkait": f'"{query}" site:linkedin.com OR site:instagram.com OR site:facebook.com',
-                "Jejak Pendidikan / Akademik": f'"{query}" site:pddikti.kemdikbud.go.id OR site:academia.edu OR site:researchgate.net'
+                "Penyebutan di Media Sosial": f'"{query}" site:linkedin.com OR site:instagram.com OR site:twitter.com',
+                "Dokumen Publik / Akademik": f'"{query}" site:pddikti.kemdikbud.go.id OR site:academia.edu'
             }
-            
-            for title, dork_query in dorks.items():
-                encoded_dork = urllib.parse.quote(dork_query)
-                search_url = f"https://www.google.com/search?q={encoded_dork}"
-                st.markdown(f"**{title}**  \n`{dork_query}`  \n👉 [Buka Pencarian Google]({search_url})")
-                st.markdown("---")
-
-        # 5. Modul Email & Phone Recon
-        elif search_type == "Email & Phone Recon":
-            st.subheader("📧 & 📱 Analisis Jejak Kontak & Domain")
-            if "@" in query:
-                domain_part = query.split("@")[-1]
-                local_part = query.split("@")[0]
-                st.info(f"Menganalisis komponen email untuk struktur: **Domain [{domain_part}] | Akun [{local_part}]**")
-                
-                st.markdown("### Alat Verifikasi Eksternal Terpercaya:")
-                st.markdown(f"1. **Pemeriksaan Mail Exchange (MX) & DNS Domain:** [MXToolbox](https://mxtoolbox.com/SuperTool.aspx?action=mx%3a{domain_part})")
-                st.markdown(f"2. **Pemeriksaan Reputasi / Kebocoran Kredensial:** [HaveIBeenPwned](https://haveibeenpwned.com/) (Cari manual dengan email: `{query}`)")
-                st.markdown(f"3. **Pemeriksaan Keamanan Domain (SSL/TLS Report):** [SSL Labs](https://www.ssllabs.com/ssltest/analyze.html?d={domain_part})")
-            else:
-                clean_phone = query.replace("+", "").replace(" ", "").replace("-", "")
-                st.info(f"Menganalisis format nomor kontak: **{query}** (Format bersih: `{clean_phone}`)")
-                
-                st.markdown("### Tautan Akses & Navigasi Cepat:")
-                st.markdown(f"- **Buka Chat WhatsApp Langsung:** [Kirim Pesan WhatsApp](https://wa.me/{clean_phone})")
-                st.markdown(f"- **Pemeriksaan Kode Negara & Operator:** [Country Code Lookup](https://www.countrycode.org/)")
-                st.warning("⚠️ Untuk pengecekan nama pemilik nomor, disarankan menggunakan verifikasi manual pada aplikasi direktori seluler yang aman.")
+            for title, dork_q in dorks.items():
+                url = f"https://www.google.com/search?q={urllib.parse.quote(dork_q)}"
+                st.markdown(f"- **{title}**: [`{dork_q}`]({url})")
