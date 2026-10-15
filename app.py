@@ -11,7 +11,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Sembunyikan elemen bawaan Streamlit (Header, Footer, MainMenu)
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -23,34 +22,35 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # Header Utama Workstation
 st.title("🛡️ Osint-Pro : CTI & Intelligence Workstation")
-st.markdown("Pusat intelijen ancaman siber (*Cyber Threat Intelligence*) dan investigasi sumber terbuka terpadu.")
+st.markdown("Cyber Threat Intelligence & Open Source Intelligence Workstation berbasis Python.")
 st.markdown("---")
 
-# Kotak Search Engine Target Tunggal (Cerdas & Otomatis)
+# Kotak Search Engine Tunggal Utama
 query = st.text_input(
-    "Masukkan Kueri Target (Username, Domain / URL, Alamat IP, Email, atau Entitas):",
-    placeholder="Contoh: target_name / detik.com / 8.8.8.8 / target@domain.com"
+    "Osint-Pro Search Engine:",
+    placeholder="Masukkan target (Username, Domain, IP, Email, atau Kata Kunci Investigasi)..."
 ).strip()
 
 st.markdown("---")
 
 if query:
-    st.success(f"Menjalankan pipeline CTI & OSINT untuk target: **{query}**")
+    st.success(f"Menjalankan analisis CTI untuk target: **{query}**")
     st.markdown("")
 
-    # Tab Modul Investigasi Menyerupai Struktur Osint-Pro
-    tab_user, tab_domain, tab_ip, tab_email, tab_cti = st.tabs([
-        "👤 Identity & Social Recon", 
-        "🌐 Domain & Subdomain (crt.sh)", 
+    # Menu Tab Sesuai Fitur Utama Osint-Pro
+    tab_user, tab_domain, tab_pddikti, tab_ip, tab_breach, tab_dork = st.tabs([
+        "👤 Identity Recon", 
+        "🌐 Subdomain & SSL", 
+        "🎓 PDDikti Verification", 
         "🌍 Network & Geolocation", 
-        "📧 Contact & Breach Check", 
-        "🤖 CTI & Threat Profiling"
+        "📧 Breach & Contact", 
+        "🔎 Advanced CTI Dorks"
     ])
 
-    # 1. Modul Identity & Social Recon
+    # 1. Identity & Social Recon (Live Check)
     with tab_user:
-        st.subheader("Pengecekan Profil Publik & Jejak Digital")
-        st.write("Melakukan verifikasi eksistensi akun target secara real-time pada berbagai platform publik utama.")
+        st.subheader("Verifikasi Identitas & Jejak Media Sosial")
+        st.write("Melakukan pengecekan status HTTP langsung pada platform publik utama.")
         
         platforms = {
             "GitHub": f"https://github.com/{query}",
@@ -62,30 +62,24 @@ if query:
             "Reddit": f"https://www.reddit.com/user/{query}"
         }
 
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
         results = []
-        
         for plat, url in platforms.items():
-            status = "Netral / Terproteksi"
+            status = "Netral"
             try:
                 resp = requests.get(url, headers=headers, timeout=4, allow_redirects=True)
-                if resp.status_code == 200:
-                    status = "🟢 Ditemukan (200 OK)"
-                elif resp.status_code == 404:
-                    status = "🔴 Tidak Ditemukan (404)"
-                else:
-                    status = f"🟡 Respon Server ({resp.status_code})"
+                status = "🟢 Ditemukan (200)" if resp.status_code == 200 else "🔴 Tidak Ada (404)"
             except:
-                status = "🛡️ Rate-Limited / Timeout"
-            results.append({"Platform": plat, "Status Akun": status, "Tautan Akses": url})
+                status = "🛡️ Terproteksi / Timeout"
+            results.append({"Platform": plat, "Status Akun": status, "URL Target": url})
             
         st.dataframe(pd.DataFrame(results), use_container_width=True)
 
-    # 2. Modul Domain & Subdomain Recon (crt.sh)
+    # 2. Subdomain & Certificate Transparency (crt.sh)
     with tab_domain:
-        st.subheader("Subdomain & Certificate Transparency Intelligence")
+        st.subheader("Certificate Transparency & Subdomain Intelligence")
         clean_domain = query.replace("https://", "").replace("http://", "").split("/")[0]
-        st.write(f"Menganalisis riwayat sertifikat SSL/TLS publik untuk pemetaan permukaan serangan domain: **{clean_domain}**")
+        st.write(f"Menganalisis riwayat sertifikat SSL publik untuk domain: **{clean_domain}**")
         
         try:
             crt_url = f"https://crt.sh/?q={clean_domain}&output=json"
@@ -96,62 +90,67 @@ if query:
                 for entry in data:
                     for sub in entry.get("name_value", "").split("\n"):
                         subdomains.add(sub.strip().lower())
-                df_sub = pd.DataFrame(list(subdomains), columns=["Daftar Subdomain Unik"])
-                st.success(f"Berhasil menemukan {len(df_sub)} entri subdomain aktif!")
+                df_sub = pd.DataFrame(list(subdomains), columns=["Subdomain Unik Teridentifikasi"])
+                st.success(f"Ditemukan {len(df_sub)} entri unik!")
                 st.dataframe(df_sub, use_container_width=True)
             else:
                 st.info("Tidak ada data subdomain terekam.")
-                st.markdown(f"👉 [Buka crt.sh secara manual](https://crt.sh/?q={clean_domain})")
+                st.markdown(f"👉 [Buka crt.sh manual](https://crt.sh/?q={clean_domain})")
         except Exception as e:
-            st.warning(f"Koneksi ke crt.sh dibatasi: {e}")
-            st.markdown(f"👉 [Buka crt.sh secara manual](https://crt.sh/?q={clean_domain})")
+            st.warning(f"Koneksi terbatas: {e}")
+            st.markdown(f"👉 [Buka crt.sh manual](https://crt.sh/?q={clean_domain})")
 
-    # 3. Modul Network & Geolocation
+    # 3. PDDikti Public Verification (Khas Osint-Pro)
+    with tab_pddikti:
+        st.subheader("Verifikasi Data Pendidikan Tinggi (PDDikti)")
+        st.write("Mengarahkan pencarian langsung ke database resmi PDDikti untuk validasi latar belakang akademis target.")
+        encoded_q = urllib.parse.quote(query)
+        pddikti_url = f"https://pddikti.kemdikbud.go.id/search?q={encoded_q}"
+        st.markdown(f"Target Nama/Keyword: **{query}**")
+        st.markdown(f"👉 **Buka Pencarian PDDikti:** [Klik di sini untuk verifikasi akademis]({pddikti_url})")
+
+    # 4. Network & Geolocation
     with tab_ip:
-        st.subheader("Infrastruktur Jaringan, ASN, & Geolocation Lookup")
+        st.subheader("Analisis Jaringan & Geolocation IP/Domain")
         clean_ip = query.replace("https://", "").replace("http://", "").split("/")[0]
-        
         try:
             is_ip = all(part.isdigit() for part in clean_ip.split(".") if part) and len(clean_ip.split(".")) == 4
             api_url = f"http://ip-api.com/json/{clean_ip}" if is_ip else f"https://ipapi.co/{clean_ip}/json/"
-            
             res = requests.get(api_url, timeout=7)
             if res.status_code == 200:
-                data = res.json()
-                st.json(data)
+                st.json(res.json())
             else:
-                st.error("Gagal mengambil data geolokasi jaringan.")
+                st.error("Gagal mengambil data jaringan.")
         except Exception as e:
-            st.error(f"Gagal memproses kueri jaringan: {e}")
+            st.error(f"Error: {e}")
 
-    # 4. Modul Contact & Breach Check
-    with tab_email:
-        st.subheader("Analisis Jejak Kontak & Reputasi Domain")
+    # 5. Breach & Contact Recon
+    with tab_breach:
+        st.subheader("Analisis Kontak, MX Record & Breach Intelligence")
         if "@" in query:
             domain_part = query.split("@")[-1]
-            st.markdown(f"- **Domain Email Target:** `{domain_part}`")
-            st.markdown(f"- **Pemeriksaan MX Record & DNS:** [MXToolbox](https://mxtoolbox.com/SuperTool.aspx?action=mx%3a{domain_part})")
-            st.markdown(f"- **Pemeriksaan Kebocoran Data (Breach):** [HaveIBeenPwned](https://haveibeenpwned.com/) (Cari manual dengan email: `{query}`)")
-            st.markdown(f"- **Analisis SSL/TLS Server:** [SSL Labs](https://www.ssllabs.com/ssltest/analyze.html?d={domain_part})")
+            st.markdown(f"- **Domain Email:** `{domain_part}`")
+            st.markdown(f"- **MXToolbox DNS Check:** [MXToolbox](https://mxtoolbox.com/SuperTool.aspx?action=mx%3a{domain_part})")
+            st.markdown(f"- **HaveIBeenPwned Check:** [HaveIBeenPwned](https://haveibeenpwned.com/)")
         else:
             clean_phone = query.replace("+", "").replace(" ", "").replace("-", "")
-            st.markdown(f"- **Tautan WhatsApp Langsung:** [Kirim Pesan](https://wa.me/{clean_phone})")
-            st.markdown(f"- **Pemeriksaan Kode Negara & Operator:** [Country Code Lookup](https://www.countrycode.org/)")
+            st.markdown(f"- **WhatsApp Direct Link:** [Buka Chat](https://wa.me/{clean_phone})")
+            st.markdown(f"- **Country Code Lookup:** [CountryCode](https://www.countrycode.org/)")
 
-    # 5. Modul CTI & Threat Profiling (Google Dorks & Hipotesis Ancaman)
-    with tab_cti:
-        st.subheader("Cyber Threat Intelligence & Advanced Dorking")
-        st.write("Konstruksi dork tingkat lanjut untuk mengidentifikasi kebocoran dokumen, direktori terbuka, atau eksposur data sensitif.")
+    # 6. Advanced CTI Dorks
+    with tab_dork:
+        st.subheader("Advanced CTI Google Dorking Engine")
+        st.write("Konstruksi dork komprehensif untuk ekstraksi dokumen sensitif dan eksposur aset.")
         
         dorks = {
-            "Dokumen Sensitif (PDF / Doc / Xls)": f'site:{query} filetype:pdf OR filetype:doc OR filetype:xls OR filetype:xlsx',
+            "Dokumen Sensitif (PDF/Doc/Xls)": f'site:{query} filetype:pdf OR filetype:doc OR filetype:xls OR filetype:xlsx',
             "Direktori Terbuka / Indeks Server": f'site:{query} intitle:"index of"',
             "File Konfigurasi / Database (.env / .sql / .json)": f'site:{query} filetype:env OR filetype:sql OR filetype:json OR filetype:txt',
-            "Penyebutan di Media Sosial & Profesional": f'"{query}" site:linkedin.com OR site:instagram.com OR site:facebook.com',
-            "Verifikasi Akademik / PDDikti": f'"{query}" site:pddikti.kemdikbud.go.id OR site:academia.edu OR site:researchgate.net'
+            "Penyebutan Profesional / Media Sosial": f'"{query}" site:linkedin.com OR site:instagram.com OR site:twitter.com',
+            "Jejak Akademik / PDDikti": f'"{query}" site:pddikti.kemdikbud.go.id OR site:academia.edu'
         }
         
         for title, dork_q in dorks.items():
             search_url = f"https://www.google.com/search?q={urllib.parse.quote(dork_q)}"
-            st.markdown(f"**{title}**  \n`{dork_q}`  \n👉 [Buka Penelusuran Google CTI]({search_url})")
+            st.markdown(f"**{title}**  \n`{dork_q}`  \n👉 [Buka CTI Google Search]({search_url})")
             st.markdown("---")
